@@ -1,4 +1,17 @@
 from .modeling_utils import MSPreTrainedModel, PreTrainedModel
+from .models.bert import (
+    BertForMaskedLM,
+    BertForMultipleChoice,
+    BertForNextSentencePrediction,
+    BertForPreTraining,
+    BertForQuestionAnswering,
+    BertForSequenceClassification,
+    BertForTokenClassification,
+    BertLayer,
+    BertLMHeadModel,
+    BertModel,
+    BertPreTrainedModel,
+)
 from .models.bit import BitBackbone
 from .models.blip_2 import (
     Blip2ForConditionalGeneration,
@@ -26,6 +39,13 @@ from .models.clip import (
     CLIPVisionModelWithProjection,
 )
 from .models.dpt import DPTForDepthEstimation
+from .models.gemma import (
+    GemmaForCausalLM,
+    GemmaForSequenceClassification,
+    GemmaForTokenClassification,
+    GemmaModel,
+    GemmaPreTrainedModel,
+)
 from .models.mt5 import (
     MT5_PRETRAINED_MODEL_ARCHIVE_LIST,
     MT5EncoderModel,
