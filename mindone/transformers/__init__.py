@@ -192,6 +192,14 @@ from .models.whisper import (
     WhisperPreTrainedModel,
     WhisperProcessor,
 )
+from .models.modernbert import (
+    ModernBertModel,
+    ModernBertForMaskedLM,
+    ModernBertForQuestionAnswering,
+    ModernBertForSequenceClassification,
+    ModernBertForTokenClassification,
+    ModernBertPreTrainedModel,
+)
 from .models.xlm_roberta import XLMRobertaModel, XLMRobertaPreTrainedModel
 from .pipelines import TextGenerationPipeline, pipeline
 from .processing_utils import ProcessorMixin
