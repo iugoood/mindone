@@ -38,6 +38,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gemma2", "Gemma2Model"),
         ("gpt2", "GPT2Model"),
         ("llama", "LlamaModel"),
+        ("siglip", "SiglipModel"),
+        ("siglip_vision_model", "SiglipVisionModel"),
         ("mt5", "MT5Model"),
         ("t5", "T5Model"),
         ("xlm-roberta", "XLMRobertaModel"),
@@ -49,6 +51,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         # Model for pre-training mapping
         ("bert", "BertForPreTraining"),
         ("gpt2", "GPT2LMHeadModel"),
+        ("paligemma", "PaliGemmaForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
@@ -86,6 +89,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         # Model for Image mapping
         ("bit", "BitModel"),
         ("dpt", "DPTModel"),
+        ("siglip_vision_model", "SiglipVisionModel"),
     ]
 )
 
@@ -116,6 +120,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("paligemma", "PaliGemmaForConditionalGeneration"),
     ]
 )
 
@@ -123,6 +128,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("paligemma", "PaliGemmaForConditionalGeneration"),
     ]
 )
 
@@ -247,7 +253,11 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict()
 
 MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict()
 
-MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict()
+MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
+    [
+        ("siglip", "SiglipModel"),
+    ]
+)
 
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict()
 
