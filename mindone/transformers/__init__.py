@@ -172,6 +172,11 @@ from .models.umt5 import (
     UMT5Model,
     UMT5PreTrainedModel,
 )
+from .models.granitemoeshared import (
+    GraniteMoeSharedModel,
+    GraniteMoeSharedForCausalLM,
+    GraniteMoeSharedPreTrainedModel,
+)
 from .models.wav2vec2 import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForAudioFrameClassification,
