@@ -1,20 +1,39 @@
 import math
-from typing import Union, Optional
+from typing import Optional, Union
+
 import mindspore
-import mindspore.ops as ops
 import mindspore.common.dtype as mstype
-from mindspore.common.tensor import Tensor
+import mindspore.ops as ops
+from mindspore.common.initializer import (
+    HeUniform,
+    Uniform,
+    XavierNormal,
+    XavierUniform,
+    _calculate_fan_in_and_fan_out,
+    initializer,
+)
 from mindspore.common.parameter import Parameter
-from mindspore.common.initializer import initializer, XavierNormal, XavierUniform, \
-    HeUniform, Uniform, _calculate_fan_in_and_fan_out
+from mindspore.common.tensor import Tensor
 from mindspore.nn.cell import Cell
-from .basic import Dense, Dropout
+from mindspore.nn.layer.basic import Dense
+from mindspore.ops.function.nn_func import (
+    _check_attn_mask_shape,
+    _check_kpm_shape,
+    _check_qkv_shape,
+    _in_projection,
+    _in_projection_packed,
+    _inner_dropout,
+    _inner_pad,
+    linear,
+)
+
 
 def _scaled_dot_product_attention(query, key, value, attn_mask, dropout_p, is_causal, is_training, dtype):
     """scaled dot product attention"""
     embed_size = query.shape[-1]
-    embed_size_tensor = scalar_to_tensor_(embed_size, dtype)
-    scaling_factor = embed_size_tensor.sqrt().sqrt()
+    # embed_size_tensor = scalar_to_tensor_(embed_size, dtype)
+    # scaling_factor = embed_size_tensor.sqrt().sqrt()
+    scaling_factor = 1 / math.sqrt(math.sqrt(embed_size))
     query = query / scaling_factor
 
     if is_causal:
@@ -32,19 +51,41 @@ def _scaled_dot_product_attention(query, key, value, attn_mask, dropout_p, is_ca
     return (output, attn)
 
 
-def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_heads, in_proj_weight,
-                                 in_proj_bias, bias_k, bias_v, add_zero_attn, dropout_p, out_proj_weight,
-                                 out_proj_bias, training=True, key_padding_mask=None, attn_mask=None,
-                                 use_separate_proj_weight=False, q_proj_weight=None, k_proj_weight=None,
-                                 v_proj_weight=None, static_k=None, static_v=None, average_attn_weights=True,
-                                 is_causal=False, k_is_v=False, q_is_k=False, dtype=mstype.float32):
+def multi_head_attention_forward(
+    query,
+    key,
+    value,
+    embed_dim_to_check,
+    num_heads,
+    in_proj_weight,
+    in_proj_bias,
+    bias_k,
+    bias_v,
+    add_zero_attn,
+    dropout_p,
+    out_proj_weight,
+    out_proj_bias,
+    training=True,
+    key_padding_mask=None,
+    attn_mask=None,
+    use_separate_proj_weight=False,
+    q_proj_weight=None,
+    k_proj_weight=None,
+    v_proj_weight=None,
+    static_k=None,
+    static_v=None,
+    average_attn_weights=True,
+    is_causal=False,
+    k_is_v=False,
+    q_is_k=False,
+    dtype=mstype.float32,
+):
     """multi head attetion forward function"""
     is_batched = _check_qkv_shape(query.ndim, key.ndim, value.ndim)
     if key_padding_mask is not None:
         _check_kpm_shape(query.ndim, key_padding_mask.ndim)
     if attn_mask is not None:
-        _check_attn_mask_shape(query.ndim, query.shape, key.shape, attn_mask.ndim,
-                               attn_mask.shape, num_heads)
+        _check_attn_mask_shape(query.ndim, query.shape, key.shape, attn_mask.ndim, attn_mask.shape, num_heads)
 
     if not is_batched:
         query = query.expand_dims(1)
@@ -68,8 +109,10 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
     if use_separate_proj_weight:
         # allow MHA to have different embedding dims when separate projection weights are used
         if key.shape[:2] != value.shape[:2]:
-            raise ValueError(f"The sequence length and batch dims of `key`: {key.shape[:2]} do not match "
-                             f"`value`: {value.shape[:2]}.")
+            raise ValueError(
+                f"The sequence length and batch dims of `key`: {key.shape[:2]} do not match "
+                f"`value`: {value.shape[:2]}."
+            )
     else:
         if key.shape != value.shape:
             raise ValueError(f"The shape of `key` {key.shape} does not match `value` {value.shape}.")
@@ -98,23 +141,25 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
             attn_mask = attn_mask.astype(mstype.bool_)
         else:
             if not ops.is_floating_point(attn_mask) and attn_mask.dtype != mstype.bool_:
-                raise ValueError(f"`attn_mask` only support float, byte, and bool types, "
-                                 f"but got not {attn_mask.dtype}.")
+                raise ValueError(
+                    f"`attn_mask` only support float, byte, and bool types, " f"but got not {attn_mask.dtype}."
+                )
         # ensure attn_mask's ndim is 3
         if attn_mask.ndim == 2:
             correct_2d_size = (tgt_len, src_len)
             if attn_mask.shape != correct_2d_size:
-                raise ValueError(f"The shape of the `attn_mask` should be {correct_2d_size}, "
-                                 f"but got {attn_mask.shape}.")
+                raise ValueError(
+                    f"The shape of the `attn_mask` should be {correct_2d_size}, " f"but got {attn_mask.shape}."
+                )
             attn_mask = attn_mask.expand_dims(0)
         elif attn_mask.ndim == 3:
             correct_3d_size = (bsz * num_heads, tgt_len, src_len)
             if attn_mask.shape != correct_3d_size:
-                raise ValueError(f"The shape of the `attn_mask` should be {correct_3d_size}, "
-                                 f"but got {attn_mask.shape}.")
+                raise ValueError(
+                    f"The shape of the `attn_mask` should be {correct_3d_size}, " f"but got {attn_mask.shape}."
+                )
         else:
-            raise ValueError(f"The ndim of `attn_mask` only support 2 or 3, "
-                             f"but got {attn_mask.ndim}.")
+            raise ValueError(f"The ndim of `attn_mask` only support 2 or 3, " f"but got {attn_mask.ndim}.")
 
     if bias_k is not None and bias_v is not None:
         if static_k is not None:
@@ -129,29 +174,24 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
             key_padding_mask = _inner_pad(key_padding_mask, (0, 1))
     else:
         if bias_k is not None or bias_v is not None:
-            raise ValueError("The bias_k and bias_v should be ``None``"
-                             "at the same time.")
+            raise ValueError("The bias_k and bias_v should be ``None``" "at the same time.")
 
     q = q.view((tgt_len, bsz * num_heads, head_dim)).swapaxes(0, 1)
     if static_k is None:
         k = k.view((k.shape[0], bsz * num_heads, head_dim)).swapaxes(0, 1)
     else:
         if static_k.shape[0] != bsz * num_heads:
-            raise ValueError(f"The shape[0] of `static_k` should be {bsz * num_heads}, "
-                             f"but got {static_k.shape[0]}")
+            raise ValueError(f"The shape[0] of `static_k` should be {bsz * num_heads}, " f"but got {static_k.shape[0]}")
         if static_k.shape[2] != head_dim:
-            raise ValueError(f"The shape[2] of `static_k` should be {head_dim}, "
-                             f"but got {static_k.shape[2]}")
+            raise ValueError(f"The shape[2] of `static_k` should be {head_dim}, " f"but got {static_k.shape[2]}")
         k = static_k
     if static_v is None:
         v = v.view((v.shape[0], bsz * num_heads, head_dim)).swapaxes(0, 1)
     else:
         if static_v.shape[0] != bsz * num_heads:
-            raise ValueError(f"The shape[0] of `static_v` should be {bsz * num_heads}, "
-                             f"but got {static_v.shape[0]}")
+            raise ValueError(f"The shape[0] of `static_v` should be {bsz * num_heads}, " f"but got {static_v.shape[0]}")
         if static_v.shape[2] != head_dim:
-            raise ValueError(f"The shape[2] of `static_v` should be {head_dim}, "
-                             f"but got {static_v.shape[2]}")
+            raise ValueError(f"The shape[2] of `static_v` should be {head_dim}, " f"but got {static_v.shape[2]}")
         v = static_v
 
     if add_zero_attn:
@@ -167,11 +207,13 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
 
     if key_padding_mask is not None:
         if key_padding_mask.shape != (bsz, src_len):
-            raise ValueError(f"The shape of `key_padding_mask` should be {(bsz, src_len)}, "
-                             f"but got {key_padding_mask.shape}.")
+            raise ValueError(
+                f"The shape of `key_padding_mask` should be {(bsz, src_len)}, " f"but got {key_padding_mask.shape}."
+            )
 
-        key_padding_mask = key_padding_mask.view((bsz, 1, 1, src_len)). \
-            tile((1, num_heads, 1, 1)).reshape(bsz * num_heads, 1, src_len)
+        key_padding_mask = (
+            key_padding_mask.view((bsz, 1, 1, src_len)).tile((1, num_heads, 1, 1)).reshape(bsz * num_heads, 1, src_len)
+        )
         if attn_mask is None:
             attn_mask = key_padding_mask
         elif attn_mask.dtype == mstype.bool_:
@@ -194,7 +236,8 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
     v = v.view((bsz, num_heads, src_len, head_dim))
 
     attn_output, attn_output_weights = _scaled_dot_product_attention(
-        q, k, v, attn_mask, dropout_p, is_causal, training, dtype)
+        q, k, v, attn_mask, dropout_p, is_causal, training, dtype
+    )
     attn_output = attn_output.transpose(2, 0, 1, 3).view((bsz * tgt_len, embed_dim))
 
     attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
@@ -308,8 +351,19 @@ class MultiheadAttention(Cell):
         (10, 8, 128)
     """
 
-    def __init__(self, embed_dim, num_heads, dropout=0.0, has_bias=True, add_bias_kv=False,
-                 add_zero_attn=False, kdim=None, vdim=None, batch_first=False, dtype=mstype.float32):
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        dropout=0.0,
+        has_bias=True,
+        add_bias_kv=False,
+        add_zero_attn=False,
+        kdim=None,
+        vdim=None,
+        batch_first=False,
+        dtype=mstype.float32,
+    ):
         super().__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
@@ -326,29 +380,36 @@ class MultiheadAttention(Cell):
         if dtype is None:
             dtype = mindspore.float32
         if not self._qkv_same_embed_dim:
-            self.q_proj_weight = Parameter(initializer(XavierUniform(), (embed_dim, embed_dim), dtype), 'q_proj_weight')
-            self.k_proj_weight = Parameter(initializer(XavierUniform(), (embed_dim, self.kdim), dtype), 'k_proj_weight')
-            self.v_proj_weight = Parameter(initializer(XavierUniform(), (embed_dim, self.vdim), dtype), 'v_proj_weight')
+            self.q_proj_weight = Parameter(initializer(XavierUniform(), (embed_dim, embed_dim), dtype), "q_proj_weight")
+            self.k_proj_weight = Parameter(initializer(XavierUniform(), (embed_dim, self.kdim), dtype), "k_proj_weight")
+            self.v_proj_weight = Parameter(initializer(XavierUniform(), (embed_dim, self.vdim), dtype), "v_proj_weight")
             self.in_proj_weight = None
         else:
-            self.in_proj_weight = Parameter(initializer(XavierUniform(), (3 * embed_dim, embed_dim), dtype),
-                                            'in_proj_weight')
+            self.in_proj_weight = Parameter(
+                initializer(XavierUniform(), (3 * embed_dim, embed_dim), dtype), "in_proj_weight"
+            )
             self.q_proj_weight = None
             self.k_proj_weight = None
             self.v_proj_weight = None
 
         if has_bias:
-            self.in_proj_bias = Parameter(initializer('zeros', (3 * embed_dim), dtype), 'in_proj_bias')
+            self.in_proj_bias = Parameter(initializer("zeros", (3 * embed_dim), dtype), "in_proj_bias")
         else:
             self.in_proj_bias = None
         fan_in, _ = _calculate_fan_in_and_fan_out((embed_dim, embed_dim))
         bound = 1 / math.sqrt(fan_in)
-        self.out_proj = Dense(embed_dim, embed_dim, has_bias=has_bias, weight_init=HeUniform(math.sqrt(5)),
-                              bias_init=Uniform(bound), dtype=dtype)
+        self.out_proj = Dense(
+            embed_dim,
+            embed_dim,
+            has_bias=has_bias,
+            weight_init=HeUniform(math.sqrt(5)),
+            bias_init=Uniform(bound),
+            dtype=dtype,
+        )
 
         if add_bias_kv:
-            self.bias_k = Parameter(initializer(XavierNormal(), (1, 1, embed_dim), dtype), 'bias_k')
-            self.bias_v = Parameter(initializer(XavierNormal(), (1, 1, embed_dim), dtype), 'bias_v')
+            self.bias_k = Parameter(initializer(XavierNormal(), (1, 1, embed_dim), dtype), "bias_k")
+            self.bias_v = Parameter(initializer(XavierNormal(), (1, 1, embed_dim), dtype), "bias_v")
         else:
             self.bias_k = self.bias_v = None
 
@@ -358,21 +419,28 @@ class MultiheadAttention(Cell):
         self.dtype = dtype
 
     def __call__(self, *args, **kwargs):
-        query = kwargs.get('query', args[0])
-        key = kwargs.get('key', args[1])
-        value = kwargs.get('value', args[2])
+        query = kwargs.get("query", args[0])
+        key = kwargs.get("key", args[1])
+        value = kwargs.get("value", args[2])
         self.k_is_v = key is value
         self.q_is_k = query is key
         return super().__call__(*args, **kwargs)
 
-    def construct(self, query: Tensor, key: Tensor, value: Tensor, key_padding_mask: Optional[Tensor] = None,
-                  need_weights: bool = True, attn_mask: Optional[Tensor] = None, average_attn_weights: bool = True):
+    def construct(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        key_padding_mask: Optional[Tensor] = None,
+        need_weights: bool = True,
+        attn_mask: Optional[Tensor] = None,
+        average_attn_weights: bool = True,
+    ):
         is_batched = query.ndim == 3
         if key_padding_mask is not None:
             _kpm_dtype = key_padding_mask.dtype
             if _kpm_dtype != mindspore.bool_ and not ops.is_floating_point(key_padding_mask):
-                raise ValueError(
-                    "only bool and floating types of key_padding_mask are supported")
+                raise ValueError("only bool and floating types of key_padding_mask are supported")
 
         if self.batch_first and is_batched:
             # k_is_v and q_is_k preprocess in __call__ since Graph mode do not support `is`
@@ -387,26 +455,54 @@ class MultiheadAttention(Cell):
 
         if not self._qkv_same_embed_dim:
             attn_output, attn_output_weights = ops.function.nn_func.multi_head_attention_forward(
-                query, key, value, self.embed_dim, self.num_heads,
-                self.in_proj_weight, self.in_proj_bias,
-                self.bias_k, self.bias_v, self.add_zero_attn,
-                self.dropout, self.out_proj.weight, self.out_proj.bias,
+                query,
+                key,
+                value,
+                self.embed_dim,
+                self.num_heads,
+                self.in_proj_weight,
+                self.in_proj_bias,
+                self.bias_k,
+                self.bias_v,
+                self.add_zero_attn,
+                self.dropout,
+                self.out_proj.weight,
+                self.out_proj.bias,
                 training=self.training,
                 key_padding_mask=key_padding_mask,
-                attn_mask=attn_mask, use_separate_proj_weight=True,
-                q_proj_weight=self.q_proj_weight, k_proj_weight=self.k_proj_weight,
-                v_proj_weight=self.v_proj_weight, average_attn_weights=average_attn_weights,
-                k_is_v=self.k_is_v, q_is_k=self.q_is_k, dtype=self.dtype)
+                attn_mask=attn_mask,
+                use_separate_proj_weight=True,
+                q_proj_weight=self.q_proj_weight,
+                k_proj_weight=self.k_proj_weight,
+                v_proj_weight=self.v_proj_weight,
+                average_attn_weights=average_attn_weights,
+                k_is_v=self.k_is_v,
+                q_is_k=self.q_is_k,
+                dtype=self.dtype,
+            )
         else:
             attn_output, attn_output_weights = ops.function.nn_func.multi_head_attention_forward(
-                query, key, value, self.embed_dim, self.num_heads,
-                self.in_proj_weight, self.in_proj_bias,
-                self.bias_k, self.bias_v, self.add_zero_attn,
-                self.dropout, self.out_proj.weight, self.out_proj.bias,
+                query,
+                key,
+                value,
+                self.embed_dim,
+                self.num_heads,
+                self.in_proj_weight,
+                self.in_proj_bias,
+                self.bias_k,
+                self.bias_v,
+                self.add_zero_attn,
+                self.dropout,
+                self.out_proj.weight,
+                self.out_proj.bias,
                 training=self.training,
                 key_padding_mask=key_padding_mask,
-                attn_mask=attn_mask, average_attn_weights=average_attn_weights,
-                k_is_v=self.k_is_v, q_is_k=self.q_is_k, dtype=self.dtype)
+                attn_mask=attn_mask,
+                average_attn_weights=average_attn_weights,
+                k_is_v=self.k_is_v,
+                q_is_k=self.q_is_k,
+                dtype=self.dtype,
+            )
 
         if self.batch_first and is_batched:
             attn_output = attn_output.swapaxes(1, 0)
