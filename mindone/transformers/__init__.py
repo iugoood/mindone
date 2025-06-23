@@ -281,6 +281,13 @@ from .models.roberta import (
     RobertaModel,
     RobertaPreTrainedModel,
 )
+from .models.nllb_moe import (
+    NllbMoeModel,
+    NllbMoeTop2Router,
+    NllbMoeSparseMLP,
+    NllbMoePreTrainedModel,
+    NllbMoeForConditionalGeneration,
+)
 from .models.siglip import SiglipModel, SiglipPreTrainedModel, SiglipTextModel, SiglipVisionModel
 from .models.speecht5 import (
     SpeechT5ForSpeechToSpeech,
