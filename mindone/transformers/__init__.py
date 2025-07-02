@@ -23,6 +23,7 @@ from .models.auto import (
     AutoModelForCausalLM,
     AutoModelForMaskedLM,
     AutoProcessor,
+    AutoBackbone,
 )
 from .models.bart import (
     BartForCausalLM,
@@ -338,6 +339,25 @@ from .models.umt5 import (
     UMT5ForTokenClassification,
     UMT5Model,
     UMT5PreTrainedModel,
+)
+from .models.vit_msn import (
+    ViTMSNModel,
+    ViTMSNPreTrainedModel,
+    ViTMSNForImageClassification,
+)
+from .models.vit_mae import (
+    ViTMAEModel,
+    ViTMAELayer,
+    ViTMAEPreTrainedModel,
+    ViTMAEForPreTraining,
+)
+from .models.vitpose import (
+    VitPosePreTrainedModel,
+    VitPoseForPoseEstimation,
+)
+from .models.vitpose_backbone import (
+    VitPoseBackbone,
+    VitPoseBackbonePreTrainedModel,
 )
 from .models.vits import VitsModel, VitsPreTrainedModel
 from .models.wav2vec2 import (
