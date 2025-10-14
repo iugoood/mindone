@@ -36,6 +36,7 @@ from . import (
     convbert,
     convnext,
     convnextv2,
+    deepseek_v3,
     depth_anything,
     dinov2,
     dpt,
